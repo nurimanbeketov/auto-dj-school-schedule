@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Умный Музыкальный Планировщик</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        .glass { background: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .active-break { animation: pulse-border 2s infinite; }
+        @keyframes pulse-border {
+            0% { border-color: rgba(16, 185, 129, 0.5); box-shadow: 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { border-color: rgba(16, 185, 129, 1); box-shadow: 0 0 10px rgba(16, 185, 129, 0); }
+            100% { border-color: rgba(16, 185, 129, 0.5); box-shadow: 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .day-btn.active { background-color: #4f46e5; color: white; border-color: #6366f1; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
+
+<div class="container mx-auto px-4 py-8 max-w-6xl">
+    <header class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-green-400 mb-2">Авто DJ: Школьное Расписание</h1>
+        <p class="text-gray-400">Музыка будет играть автоматически строго по времени перемен и выбранным дням</p>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Левая колонка: Настройки и расписание -->
+        <div class="lg:col-span-6 space-y-6 flex flex-col">
+            
+            <!-- Шаг 1: Загрузка и Библиотека -->
+            <div class="glass p-5 rounded-2xl flex flex-col shrink-0">
+                <h2 class="text-lg font-semibold mb-3 flex items-center text-indigo-300 shrink-0">
+                    <span class="bg-indigo-500/20 text-indigo-400 rounded-full w-7 h-7 flex items-center justify-center mr-3 text-sm">1</span>
+                    База музыки (Сохраняется)
+                </h2>
+                
+                <label class="block w-full cursor-pointer border-2 border-dashed border-gray-600 hover:border-indigo-400 rounded-xl p-4 text-center transition-colors shrink-0 mb-3">
+                    <span class="block text-gray-400 mb-2 text-sm">Нажмите или перетащите музыку</span>
+                    <span class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm inline-block transition-colors">Выбрать файлы</span>
+                    <input type="file" id="fileInput" multiple accept="audio/*" class="hidden" onchange="handleFiles(event)">
+                </label>
+                <div id="loadingStatus" class="text-sm text-yellow-400 hidden shrink-0 mb-2 text-center">Обработка файлов...</div>
+                
+                <!-- Список всей загруженной музыки -->
+                <div id="libraryContainer" class="max-h-[200px] overflow-y-auto space-y-1 mb-2 pr-1 hidden">
+                    <!-- Заполняется через JS -->
+                </div>
+
+                <div class="text-sm text-gray-400 flex justify-between items-center border-t border-gray-700 pt-3 shrink-0 mb-3">
+                    <span>Всего файлов в базе:</span>
+                    <span id="trackCount" class="font-bold text-white bg-indigo-600 px-2 py-0.5 rounded-md">0</span>
+                </div>
+
+                <!-- Звуки звонков -->
+                <div class="border-t border-gray-700 pt-3 shrink-0">
+                    <h3 class="text-xs text-gray-400 mb-2 uppercase tracking-wider">Звуки звонков (Начало / Конец)</h3>
+                    <div class="flex gap-2">
+                        <div class="flex-1 relative">
+                            <label class="block w-full cursor-pointer bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-2 text-center transition-colors">
+                                <span class="text-xs text-indigo-300 truncate block" id="bellStartLabel">Начало</span>
+                                <input type="file" accept="audio/*" class="hidden" onchange="handleBell(event, 'start')">
+                            </label>
+                            <button onclick="removeBell('start')" id="bellStartRemove" class="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full w-5 h-5 text-xs hidden flex items-center justify-center shadow-lg">×</button>
+                        </div>
+                        <div class="flex-1 relative">
+                            <label class="block w-full cursor-pointer bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-2 text-center transition-colors">
+                                <span class="text-xs text-green-300 truncate block" id="bellEndLabel">Конец</span>
+                                <input type="file" accept="audio/*" class="hidden" onchange="handleBell(event, 'end')">
+                            </label>
+                            <button onclick="removeBell('end')" id="bellEndRemove" class="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full w-5 h-5 text-xs hidden flex items-center justify-center shadow-lg">×</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Шаг 2: Расписание (Конструктор) -->
+            <div class="glass p-5 rounded-2xl flex-grow flex flex-col max-h-[600px]">
+                <div class="flex justify-between items-center mb-4 shrink-0">
+                    <h2 class="text-lg font-semibold flex items-center text-purple-300">
+                        <span class="bg-purple-500/20 text-purple-400 rounded-full w-7 h-7 flex items-center justify-center mr-3 text-sm">2</span>
+                        Расписание (Конструктор)
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button onclick="addNewBreak()" class="text-xs bg-green-600/20 hover:bg-green-600/40 text-green-300 px-3 py-1.5 rounded-lg transition-colors border border-green-500/30 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Добавить
+                        </button>
+                        <button onclick="generateAllMixes()" id="btnGenAll" class="text-xs bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 px-3 py-1.5 rounded-lg transition-colors border border-purple-500/30" disabled>
+                            Авто-заполнить всё
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="scheduleContainer" class="space-y-3 overflow-y-auto pr-2 flex-grow pb-4">
+                    <!-- Расписание генерируется через JS -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Центральная/Правая колонка: Статус и Плеер -->
+        <div class="lg:col-span-6 space-y-6 flex flex-col">
+            
+            <!-- Шаг 3: Автоматизация и Дни недели -->
+            <div class="glass p-5 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden shrink-0">
+                <div class="absolute inset-0 bg-gradient-to-r from-green-900/20 to-emerald-900/20 z-0 opacity-50"></div>
+                
+                <h2 class="text-xl font-semibold mb-4 relative z-10 flex items-center text-green-300 w-full justify-center">
+                    <span class="bg-green-500/20 text-green-400 rounded-full w-8 h-8 flex items-center justify-center mr-3">3</span>
+                    Автоматический режим
+                </h2>
+                
+                <!-- Дни недели -->
+                <div class="w-full max-w-md relative z-10 bg-gray-800/80 p-3 rounded-xl border border-gray-700 mb-4">
+                    <div class="text-xs text-gray-400 text-center mb-2 uppercase tracking-wider">Дни работы авто-плеера</div>
+                    <div class="flex justify-between" id="daysContainer">
+                        <!-- JS генерирует кнопки дней -->
+                    </div>
+                </div>
+                
+                <div class="text-4xl font-mono font-bold text-white mb-2 relative z-10" id="clockDisplay">00:00:00</div>
+                <div class="text-sm text-gray-400 mb-6 relative z-10 h-5" id="currentStatusText">Система ожидает запуска</div>
+
+                <button onclick="toggleAutomation()" id="btnToggleAuto" class="relative z-10 w-full max-w-md bg-gray-700 hover:bg-green-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg text-lg disabled:opacity-50 disabled:cursor-not-allowed border-2 border-transparent">
+                    ВКЛЮЧИТЬ АВТО-ПЛЕЕР
+                </button>
+            </div>
+
+            <!-- Плеер -->
+            <div class="glass p-6 rounded-2xl relative overflow-hidden flex-shrink-0">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gray-800">
+                    <div id="progressBar" class="h-full bg-gradient-to-r from-green-400 to-emerald-500 w-0 transition-all duration-300"></div>
+                </div>
+                
+                <div class="flex justify-between items-end mb-2">
+                    <h3 class="text-sm text-gray-400 uppercase tracking-wider">Сейчас играет</h3>
+                    <span id="activeBreakBadge" class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-md hidden border border-green-500/30">Перемена активна</span>
+                </div>
+                
+                <div id="currentTrackName" class="text-xl font-bold text-white truncate mb-1">Нет активного трека</div>
+                <div class="flex justify-between text-xs text-gray-500 font-mono mb-4">
+                    <span id="currentTime">00:00</span>
+                    <span id="totalTime">00:00</span>
+                </div>
+
+                <div class="flex items-center justify-center space-x-6">
+                    <button onclick="prevTrack()" class="text-gray-400 hover:text-white transition-colors p-2 disabled:opacity-30" id="btnPrev">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                    </button>
+                    <button onclick="togglePlay()" id="playPauseBtn" class="bg-white text-gray-900 rounded-full p-4 hover:scale-105 transition-transform shadow-lg shadow-white/10 disabled:opacity-50 disabled:hover:scale-100">
+                        <svg class="w-8 h-8 ml-1" id="playIcon" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                        <svg class="w-8 h-8 hidden" id="pauseIcon" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    </button>
+                    <button onclick="nextTrack()" class="text-gray-400 hover:text-white transition-colors p-2 disabled:opacity-30" id="btnNext">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+
+                <audio id="audioPlayer" class="hidden"></audio>
+                <audio id="bellPlayer" class="hidden"></audio>
+            </div>
+
+            <!-- Плейлист текущей перемены -->
+            <div class="glass p-5 rounded-2xl flex-grow flex flex-col overflow-hidden min-h-[250px]">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-md font-semibold text-white" id="playlistTitle">Плейлист (выберите перемену)</h3>
+                    <div class="text-xs bg-gray-800 px-2 py-1 rounded-md text-gray-400" id="playlistDurationInfo">
+                        00:00
+                    </div>
+                </div>
+                
+                <div id="playlistContainer" class="flex-grow overflow-y-auto space-y-1 pr-2">
+                    <div class="text-center text-gray-500 mt-6 text-sm">
+                        Кликните по любой перемене слева, чтобы посмотреть её музыку.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- ДАННЫЕ И СОСТОЯНИЕ ---
+    let library = []; 
+    let bellStart = null;
+    let bellEnd = null;
+
+    // Активные дни недели (0 - Воскресенье, 1 - Понедельник ... 6 - Суббота)
+    // По умолчанию ПН-ПТ
+    let activeDays = [1, 2, 3, 4, 5]; 
+
+    // Динамическое расписание
+    let schedule = [];
+
+    // Шаблон для расписания, если база пустая
+    const defaultSchedule = [
+        { id: 1, label: "После 1 пары", start: "09:20", end: "09:30", dur: 10, mix: [], isEnabled: true },
+        { id: 2, label: "После 2 пары", start: "10:50", end: "11:00", dur: 10, mix: [], isEnabled: true },
+        { id: 3, label: "После 3 пары", start: "12:20", end: "12:40", dur: 20, mix: [], isEnabled: true }
+    ];
+
+    let viewingBreakId = null; 
+    let activeBreakId = null;  
+    let playingBreakId = null; 
+    let currentTrackIndex = -1;
+    let isAutoMode = false;
+
+    // --- DOM ЭЛЕМЕНТЫ ---
+    const audioPlayer = document.getElementById('audioPlayer');
+    const bellPlayer = document.getElementById('bellPlayer');
+    const scheduleContainer = document.getElementById('scheduleContainer');
+    const playlistContainer = document.getElementById('playlistContainer');
+    const clockDisplay = document.getElementById('clockDisplay');
+    const currentStatusText = document.getElementById('currentStatusText');
+    const btnToggleAuto = document.getElementById('btnToggleAuto');
+    const activeBreakBadge = document.getElementById('activeBreakBadge');
+    const libraryContainer = document.getElementById('libraryContainer');
+    const loadingStatusEl = document.getElementById('loadingStatus');
+    const daysContainer = document.getElementById('daysContainer');
+    
+    // Плеер
+    const currentTrackNameEl = document.getElementById('currentTrackName');
+    const progressBar = document.getElementById('progressBar');
+    const currentTimeEl = document.getElementById('currentTime');
+    const totalTimeEl = document.getElementById('totalTime');
+    const playIcon = document.getElementById('playIcon');
+    const pauseIcon = document.getElementById('pauseIcon');
+    const playlistTitle = document.getElementById('playlistTitle');
+    const playlistDurationInfo = document.getElementById('playlistDurationInfo');
+
+    // --- БАЗА ДАННЫХ (INDEXED DB) ---
+    let db;
+    function initDB() {
+        return new Promise((resolve, reject) => {
+            // Увеличили версию БД до 2 для поддержки новой структуры schedule
+            const request = indexedDB.open("SchoolDJ_DB", 2);
+            request.onerror = (e) => reject(e);
+            request.onsuccess = (e) => { db = e.target.result; resolve(); };
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('tracks')) {
+                    db.createObjectStore('tracks', { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains('schedule')) {
+                    db.createObjectStore('schedule', { keyPath: 'id' });
+                } else {
+                    // Очищаем старое расписание при обновлении структуры
+                    db.deleteObjectStore('schedule');
+                    db.createObjectStore('schedule', { keyPath: 'id' });
+                }
+            };
+        });
+    }
+
+    // Загрузка настроек дней недели
+    function loadSettings() {
+        const savedDays = localStorage.getItem('schoolDJ_activeDays');
+        if (savedDays) {
+            activeDays = JSON.parse(savedDays);
+        }
+        renderDaysSelector();
+    }
+
+    function saveSettings() {
+        localStorage.setItem('schoolDJ_activeDays', JSON.stringify(activeDays));
+    }
+
+    function loadDataFromDB() {
+        return new Promise((resolve) => {
+            if (!db) return resolve();
+            const tx = db.transaction(['tracks', 'schedule'], 'readonly');
+            const tracksStore = tx.objectStore('tracks');
+            const scheduleStore = tx.objectStore('schedule');
+
+            const tracksReq = tracksStore.getAll();
+            tracksReq.onsuccess = () => {
+                const loadedTracks = tracksReq.result;
+                
+                // Звонки
+                const bStart = loadedTracks.find(t => t.id === 'bell_start');
+                const bEnd = loadedTracks.find(t => t.id === 'bell_end');
+                if (bStart) {
+                    bellStart = { ...bStart, url: URL.createObjectURL(bStart.file) };
+                    document.getElementById('bellStartLabel').innerText = "Начало (загружено)";
+                    document.getElementById('bellStartLabel').classList.replace('text-indigo-300', 'text-white');
+                    document.getElementById('bellStartRemove').classList.remove('hidden');
+                }
+                if (bEnd) {
+                    bellEnd = { ...bEnd, url: URL.createObjectURL(bEnd.file) };
+                    document.getElementById('bellEndLabel').innerText = "Конец (загружено)";
+                    document.getElementById('bellEndLabel').classList.replace('text-green-300', 'text-white');
+                    document.getElementById('bellEndRemove').classList.remove('hidden');
+                }
+
+                // Библиотека
+                library = loadedTracks.filter(t => t.id !== 'bell_start' && t.id !== 'bell_end').map(t => ({
+                    ...t,
+                    url: URL.createObjectURL(t.file)
+                }));
+
+                // Расписание
+                const scheduleReq = scheduleStore.getAll();
+                scheduleReq.onsuccess = () => {
+                    const savedSchedule = scheduleReq.result;
+                    if (savedSchedule && savedSchedule.length > 0) {
+                        schedule = savedSchedule.map(s => {
+                            let mixTracks = [];
+                            if (s.mixIds) {
+                                mixTracks = s.mixIds
+                                    .map(id => library.find(t => t.id === id))
+                                    .filter(t => t !== undefined);
+                            }
+                            return {
+                                id: s.id,
+                                label: s.label || "Перемена",
+                                start: s.start || "10:00",
+                                end: s.end || "10:10",
+                                dur: s.dur || 10,
+                                isEnabled: s.isEnabled !== undefined ? s.isEnabled : true,
+                                mix: mixTracks
+                            };
+                        });
+                    } else {
+                        // Если пусто, берем дефолтное
+                        schedule = JSON.parse(JSON.stringify(defaultSchedule));
+                    }
+                    // Сортируем расписание по времени для красоты
+                    schedule.sort((a, b) => a.start.localeCompare(b.start));
+                    resolve();
+                };
+            };
+        });
+    }
+
+    function saveTrackToDB(track) {
+        if (!db) return;
+        const tx = db.transaction('tracks', 'readwrite');
+        const store = tx.objectStore('tracks');
+        const t = { ...track };
+        delete t.url; 
+        store.put(t);
+    }
+
+    function removeTrackFromDB(id) {
+        if (!db) return;
+        const tx = db.transaction('tracks', 'readwrite');
+        const store = tx.objectStore('tracks');
+        store.delete(id);
+    }
+
+    function saveScheduleToDB() {
+        if (!db) return;
+        const tx = db.transaction('schedule', 'readwrite');
+        const store = tx.objectStore('schedule');
+        
+        // Очищаем старое перед сохранением нового, чтобы удаленные элементы пропали
+        store.clear().onsuccess = () => {
+            schedule.forEach(b => {
+                store.put({ 
+                    id: b.id, 
+                    label: b.label,
+                    start: b.start,
+                    end: b.end,
+                    dur: b.dur,
+                    isEnabled: b.isEnabled,
+                    mixIds: b.mix.map(t => t.id)
+                });
+            });
+        };
+    }
+
+    // --- ИНИЦИАЛИЗАЦИЯ ---
+    async function init() {
+        loadingStatusEl.innerText = "Загрузка сохраненной базы...";
+        loadingStatusEl.classList.remove('hidden');
+
+        try {
+            loadSettings();
+            await initDB();
+            await loadDataFromDB();
+        } catch (e) {
+            console.error("Ошибка БД:", e);
+        }
+
+        loadingStatusEl.classList.add('hidden');
+        loadingStatusEl.innerText = "Обработка файлов..."; 
+
+        renderLibrary();
+        renderSchedule();
+        if (library.length > 0) {
+            document.getElementById('btnGenAll').disabled = false;
+        }
+        startClock();
+    }
+
+    function startClock() {
+        setInterval(() => {
+            const now = new Date();
+            const h = now.getHours().toString().padStart(2, '0');
+            const m = now.getMinutes().toString().padStart(2, '0');
+            const s = now.getSeconds().toString().padStart(2, '0');
+            const currentTimeStr = `${h}:${m}`;
+            
+            clockDisplay.innerText = `${h}:${m}:${s}`;
+
+            if (isAutoMode) {
+                checkSchedule(currentTimeStr, now.getDay());
+            }
+        }, 1000);
+    }
+
+    // --- РАБОТА С ДНЯМИ НЕДЕЛИ ---
+    function renderDaysSelector() {
+        const days = [
+            { val: 1, label: "ПН" }, { val: 2, label: "ВТ" }, { val: 3, label: "СР" },
+            { val: 4, label: "ЧТ" }, { val: 5, label: "ПТ" }, { val: 6, label: "СБ" }, { val: 0, label: "ВС" }
+        ];
+
+        daysContainer.innerHTML = days.map(d => {
+            const isActive = activeDays.includes(d.val);
+            return `<button onclick="toggleDay(${d.val})" class="day-btn flex-1 py-1 mx-0.5 rounded text-xs font-bold transition-colors border border-gray-600 ${isActive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}">${d.label}</button>`;
+        }).join('');
+    }
+
+    function toggleDay(dayVal) {
+        if (activeDays.includes(dayVal)) {
+            activeDays = activeDays.filter(d => d !== dayVal);
+        } else {
+            activeDays.push(dayVal);
+        }
+        saveSettings();
+        renderDaysSelector();
+    }
+
+    // --- ОБРАБОТКА ЗВОНКОВ ---
+    function handleBell(event, type) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const id = type === 'start' ? 'bell_start' : 'bell_end';
+        const newTrack = { id: id, name: file.name, file: file, url: URL.createObjectURL(file) };
+
+        if (type === 'start') {
+            if (bellStart && bellStart.url) URL.revokeObjectURL(bellStart.url);
+            bellStart = newTrack;
+            document.getElementById('bellStartLabel').innerText = "Начало (загружено)";
+            document.getElementById('bellStartLabel').classList.replace('text-indigo-300', 'text-white');
+            document.getElementById('bellStartRemove').classList.remove('hidden');
+        } else {
+            if (bellEnd && bellEnd.url) URL.revokeObjectURL(bellEnd.url);
+            bellEnd = newTrack;
+            document.getElementById('bellEndLabel').innerText = "Конец (загружено)";
+            document.getElementById('bellEndLabel').classList.replace('text-green-300', 'text-white');
+            document.getElementById('bellEndRemove').classList.remove('hidden');
+        }
+
+        saveTrackToDB(newTrack);
+        event.target.value = '';
+    }
+
+    function removeBell(type) {
+        if(confirm("Удалить звук этого звонка?")) {
+            const id = type === 'start' ? 'bell_start' : 'bell_end';
+            if(type === 'start') {
+                if(bellStart && bellStart.url) URL.revokeObjectURL(bellStart.url);
+                bellStart = null;
+                document.getElementById('bellStartLabel').innerText = "Начало";
+                document.getElementById('bellStartLabel').classList.replace('text-white', 'text-indigo-300');
+                document.getElementById('bellStartRemove').classList.add('hidden');
+            } else {
+                if(bellEnd && bellEnd.url) URL.revokeObjectURL(bellEnd.url);
+                bellEnd = null;
+                document.getElementById('bellEndLabel').innerText = "Конец";
+                document.getElementById('bellEndLabel').classList.replace('text-white', 'text-green-300');
+                document.getElementById('bellEndRemove').classList.add('hidden');
+            }
+            removeTrackFromDB(id);
+        }
+    }
+
+    async function handleFiles(event) {
+        const files = Array.from(event.target.files).filter(f => f.type.startsWith('audio/'));
+        if (files.length === 0) return;
+
+        loadingStatusEl.classList.remove('hidden');
+        document.getElementById('btnGenAll').disabled = true;
+
+        for (const file of files) {
+            try {
+                const duration = await getAudioDuration(file);
+                const trackId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                const newTrack = {
+                    id: trackId, name: file.name.replace(/\.[^/.]+$/, ""), duration: duration, file: file, url: URL.createObjectURL(file)
+                };
+                library.push(newTrack);
+                saveTrackToDB(newTrack);
+            } catch (e) {
+                console.error("Ошибка:", file.name, e);
+            }
+        }
+
+        loadingStatusEl.classList.add('hidden');
+        renderLibrary();
+        if (library.length > 0) {
+            document.getElementById('btnGenAll').disabled = false;
+            renderSchedule(); 
+        }
+        event.target.value = ''; 
+    }
+
+    function getAudioDuration(file) {
+        return new Promise((resolve, reject) => {
+            const tempAudio = new Audio();
+            const objectUrl = URL.createObjectURL(file);
+            tempAudio.addEventListener('loadedmetadata', () => { resolve(tempAudio.duration); URL.revokeObjectURL(objectUrl); });
+            tempAudio.addEventListener('error', reject);
+            tempAudio.src = objectUrl;
+        });
+    }
+
+    function renderLibrary() {
+        document.getElementById('trackCount').innerText = library.length;
+        if (library.length === 0) {
+            libraryContainer.classList.add('hidden');
+            document.getElementById('btnGenAll').disabled = true;
+            return;
+        }
+
+        libraryContainer.classList.remove('hidden');
+        libraryContainer.innerHTML = library.map((track, i) => `
+            <div class="flex justify-between items-center bg-gray-800/40 p-2 rounded text-sm hover:bg-gray-700/60 transition-colors border border-transparent hover:border-gray-600">
+                <span class="truncate pr-2 text-gray-300 w-full" title="${track.name}">${track.name}</span>
+                <div class="flex items-center space-x-2 flex-shrink-0">
+                    <span class="text-xs text-gray-500 font-mono w-10 text-right mr-1">${formatTime(track.duration)}</span>
+                    <button onclick="addToCurrentBreak(${i})" class="w-7 h-7 flex items-center justify-center rounded bg-green-500/10 text-green-400 hover:bg-green-500/30 transition-colors" title="Добавить в выбранную перемену">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    </button>
+                    <button onclick="deleteFromLibrary(${i})" class="w-7 h-7 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/30 transition-colors" title="Удалить из базы">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function deleteFromLibrary(index) {
+        if(confirm("Удалить этот трек из базы? Он также будет автоматически удален из всех расписаний (перемен).")) {
+            const removedTrack = library[index];
+            if (playingBreakId) {
+                const activeMix = getActiveMix();
+                if (activeMix[currentTrackIndex] && activeMix[currentTrackIndex].id === removedTrack.id) {
+                    audioPlayer.pause();
+                    currentTrackNameEl.innerText = "Трек удален";
+                    progressBar.style.width = "0%";
+                    playIcon.classList.remove('hidden'); pauseIcon.classList.add('hidden');
+                }
+            }
+            if (removedTrack.url) URL.revokeObjectURL(removedTrack.url);
+            library.splice(index, 1);
+            removeTrackFromDB(removedTrack.id);
+            
+            schedule.forEach(b => {
+                const indexInMix = b.mix.findIndex(t => t.id === removedTrack.id);
+                if (indexInMix !== -1 && playingBreakId === b.id && currentTrackIndex > indexInMix) { currentTrackIndex--; }
+                b.mix = b.mix.filter(t => t.id !== removedTrack.id);
+            });
+            saveScheduleToDB(); renderLibrary(); renderSchedule();
+            if(viewingBreakId) viewBreakPlaylist(viewingBreakId);
+            if(library.length === 0) document.getElementById('btnGenAll').disabled = true;
+        }
+    }
+
+    // --- ДИНАМИЧЕСКОЕ РАСПИСАНИЕ (КОНСТРУКТОР) ---
+    function addNewBreak() {
+        const newBreak = {
+            id: Date.now(),
+            label: "Новая перемена",
+            start: "12:00",
+            end: "12:10",
+            dur: 10,
+            isEnabled: true,
+            mix: []
+        };
+        schedule.push(newBreak);
+        sortSchedule();
+        saveScheduleToDB();
+        renderSchedule();
+        viewBreakPlaylist(newBreak.id);
+    }
+
+    function deleteBreakConfig(id) {
+        if(confirm("Удалить эту перемену навсегда?")) {
+            if (playingBreakId === id || activeBreakId === id) {
+                alert("Нельзя удалить активную или играющую сейчас перемену. Сначала выключите авто-плеер.");
+                return;
+            }
+            schedule = schedule.filter(b => b.id !== id);
+            saveScheduleToDB();
+            if (viewingBreakId === id) viewingBreakId = null;
+            renderSchedule();
+            if (viewingBreakId === null && schedule.length > 0) viewBreakPlaylist(schedule[0].id);
+            else if (viewingBreakId === null) playlistContainer.innerHTML = '';
+        }
+    }
+
+    function updateBreakField(id, field, value) {
+        const breakData = schedule.find(b => b.id === id);
+        if (!breakData) return;
+
+        if (field === 'dur') {
+            let dur = parseInt(value);
+            if(isNaN(dur) || dur < 1) dur = 1;
+            breakData.dur = dur;
+            recalcCustomEnd(breakData);
+        } else if (field === 'start') {
+            breakData.start = value;
+            recalcCustomEnd(breakData);
+            sortSchedule(); // Если поменяли время, сортируем
+        } else {
+            breakData[field] = value;
+        }
+
+        saveScheduleToDB();
+        renderSchedule();
+        if (viewingBreakId === id) viewBreakPlaylist(id);
+    }
+
+    function recalcCustomEnd(breakData) {
+        if(!breakData.start) return;
+        let [h, m] = breakData.start.split(':').map(Number);
+        m += breakData.dur;
+        h += Math.floor(m / 60);
+        m = m % 60;
+        h = h % 24;
+        breakData.end = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    function sortSchedule() {
+        schedule.sort((a, b) => a.start.localeCompare(b.start));
+    }
+
+    function renderSchedule() {
+        scheduleContainer.innerHTML = '';
+        
+        if (schedule.length === 0) {
+            scheduleContainer.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Нет перемен. Добавьте первую!</div>';
+            return;
+        }
+
+        schedule.forEach(b => {
+            const isReady = b.mix.length > 0;
+            const isActive = b.id === activeBreakId;
+            const isViewing = b.id === viewingBreakId;
+            const isOff = !b.isEnabled;
+            
+            const el = document.createElement('div');
+            el.className = `p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-2 
+                ${isActive ? 'bg-green-900/40 border-green-500 active-break' : (isViewing ? 'bg-gray-700/80 border-indigo-400' : 'bg-gray-800/50 border-gray-700 hover:border-gray-500')} 
+                ${isOff ? 'opacity-60 grayscale-[50%]' : ''}`;
+            
+            el.onclick = (e) => {
+                if(!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('label')) viewBreakPlaylist(b.id);
+            };
+
+            el.innerHTML = `
+                <div class="flex justify-between items-center gap-2">
+                    <input type="text" value="${b.label}" onchange="updateBreakField(${b.id}, 'label', this.value)" onclick="event.stopPropagation()" class="bg-transparent font-semibold ${isActive ? 'text-green-400' : 'text-gray-100'} border-b border-transparent hover:border-gray-600 focus:border-indigo-400 focus:bg-gray-800 outline-none w-full px-1 py-0.5 rounded transition-all text-sm truncate">
+                    
+                    <label class="flex items-center cursor-pointer flex-shrink-0" title="Включить/выключить эту перемену" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${b.isEnabled ? 'checked' : ''} onchange="updateBreakField(${b.id}, 'isEnabled', this.checked)" class="sr-only peer">
+                        <div class="w-9 h-5 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500 relative"></div>
+                    </label>
+                </div>
+                
+                <div class="flex items-center gap-2 text-xs text-gray-400 mt-2 mb-1" onclick="event.stopPropagation()">
+                    <input type="time" value="${b.start}" onchange="updateBreakField(${b.id}, 'start', this.value)" class="bg-gray-900 text-gray-300 rounded px-1.5 py-1 border border-gray-600 focus:outline-none focus:border-indigo-500">
+                    <span>+</span>
+                    <div class="flex items-center border border-gray-600 rounded bg-gray-900 px-1 overflow-hidden focus-within:border-indigo-500">
+                        <input type="number" value="${b.dur}" min="1" max="120" onchange="updateBreakField(${b.id}, 'dur', this.value)" class="bg-transparent text-gray-300 w-8 text-center outline-none py-1 appearance-none">
+                        <span class="text-gray-500 pr-1">м</span>
+                    </div>
+                    <span class="ml-auto font-mono text-gray-500">= ${b.end}</span>
+                </div>
+
+                <div class="flex justify-between items-center mt-2 border-t border-gray-700/50 pt-2">
+                    <div class="text-[11px] ${isReady ? 'text-indigo-400' : 'text-red-400/80'} flex items-center">
+                        ${isReady ? `<span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-1.5"></span> ${b.mix.length} треков` : `<span class="w-1.5 h-1.5 rounded-full bg-red-500/50 mr-1.5"></span> Пусто`}
+                    </div>
+                    <div class="flex space-x-1">
+                        <button onclick="generateMixForBreak(${b.id}); event.stopPropagation();" class="text-xs bg-gray-700 hover:bg-indigo-600 text-white px-2 py-1.5 rounded transition-colors" title="Авто-заполнить случайной музыкой" ${library.length === 0 ? 'disabled opacity-50' : ''}>
+                            ${isReady ? 'Заменить' : 'Авто'}
+                        </button>
+                        <button onclick="deleteBreakConfig(${b.id}); event.stopPropagation();" class="text-xs bg-red-900/30 hover:bg-red-600 text-red-300 hover:text-white px-2 py-1.5 rounded transition-colors flex items-center" title="Удалить перемену">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+            scheduleContainer.appendChild(el);
+        });
+    }
+
+    // --- УПРАВЛЕНИЕ МИКСАМИ ---
+    function addToCurrentBreak(libraryIndex) {
+        if (!viewingBreakId) { alert("Сначала выберите перемену в списке (Кликните по блоку перемены в шаге 2)."); return; }
+        const breakData = schedule.find(b => b.id === viewingBreakId);
+        breakData.mix.push(library[libraryIndex]);
+        saveScheduleToDB(); renderSchedule(); viewBreakPlaylist(viewingBreakId);
+    }
+
+    function removeTrackFromBreak(breakId, index) {
+        const breakData = schedule.find(b => b.id === breakId);
+        if (playingBreakId === breakId && currentTrackIndex === index) {
+            audioPlayer.pause(); currentTrackNameEl.innerText = "Трек удален"; progressBar.style.width = "0%";
+            playIcon.classList.remove('hidden'); pauseIcon.classList.add('hidden');
+        } else if (playingBreakId === breakId && currentTrackIndex > index) { currentTrackIndex--; }
+        breakData.mix.splice(index, 1);
+        saveScheduleToDB(); renderSchedule(); viewBreakPlaylist(breakId);
+    }
+
+    function moveTrackInBreak(breakId, index, direction) {
+        const breakData = schedule.find(b => b.id === breakId);
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= breakData.mix.length) return;
+        const temp = breakData.mix[index]; breakData.mix[index] = breakData.mix[newIndex]; breakData.mix[newIndex] = temp;
+        if (playingBreakId === breakId) {
+            if (currentTrackIndex === index) currentTrackIndex = newIndex;
+            else if (currentTrackIndex === newIndex) currentTrackIndex = index;
+        }
+        saveScheduleToDB(); viewBreakPlaylist(breakId);
+    }
+
+    function generateMixForBreak(breakId) {
+        if (library.length === 0) { alert("Сначала загрузите музыку в базу!"); return; }
+        const breakData = schedule.find(b => b.id === breakId);
+        const targetSeconds = breakData.dur * 60;
+        let currentTotalSeconds = 0;
+        breakData.mix = [];
+        const shuffledLibrary = [...library].sort(() => 0.5 - Math.random());
+        for (const track of shuffledLibrary) {
+            if (currentTotalSeconds < targetSeconds) { breakData.mix.push(track); currentTotalSeconds += track.duration; }
+        }
+        while (currentTotalSeconds < targetSeconds && breakData.mix.length > 0) {
+             const randomTrack = library[Math.floor(Math.random() * library.length)];
+             breakData.mix.push(randomTrack); currentTotalSeconds += randomTrack.duration;
+        }
+        saveScheduleToDB(); renderSchedule(); viewBreakPlaylist(breakId);
+    }
+
+    function generateAllMixes() {
+        if (library.length === 0) return;
+        schedule.forEach(b => generateMixForBreak(b.id));
+    }
+
+    function viewBreakPlaylist(breakId) {
+        viewingBreakId = breakId;
+        renderSchedule(); 
+        
+        const breakData = schedule.find(b => b.id === breakId);
+        if(!breakData) return;
+        
+        playlistTitle.innerHTML = `<span class="text-indigo-400">${breakData.label}</span> <span class="text-gray-400 text-sm ml-2">(${breakData.start}-${breakData.end})</span>`;
+        
+        if (breakData.mix.length === 0) {
+            playlistContainer.innerHTML = `<div class="text-center text-gray-500 mt-10 text-sm">Нет музыки.<br><br>Добавьте треки из базы кнопкой <strong class="text-green-400">+</strong><br>или используйте кнопку <strong class="text-gray-300">Авто</strong> для случайного заполнения.</div>`;
+            playlistDurationInfo.innerText = "00:00";
+            return;
+        }
+
+        playlistContainer.innerHTML = '';
+        let totalTime = 0;
+
+        breakData.mix.forEach((track, index) => {
+            totalTime += track.duration;
+            const isPlayingThisTrack = (playingBreakId === breakId && index === currentTrackIndex);
+            
+            const el = document.createElement('div');
+            el.className = `p-1.5 rounded-lg flex items-center text-sm transition-colors mb-1 border ${isPlayingThisTrack ? 'bg-green-600/20 border-green-500/40' : 'bg-gray-800/40 border-transparent hover:bg-gray-700/60'}`;
+            
+            el.innerHTML = `
+                <div class="truncate pr-3 flex items-center flex-grow cursor-pointer" onclick="playSpecificTrack(${breakId}, ${index})">
+                    <span class="text-gray-500 w-5 text-xs text-center flex-shrink-0">${index + 1}</span>
+                    <span class="${isPlayingThisTrack ? 'text-green-300 font-medium' : 'text-gray-300'} truncate pl-1">${track.name}</span>
+                </div>
+                <div class="flex items-center space-x-1 flex-shrink-0 ml-2">
+                    <span class="text-xs text-gray-500 font-mono mr-2">${formatTime(track.duration)}</span>
+                    ${!isAutoMode ? `
+                    <div class="flex flex-col space-y-0.5">
+                        <button onclick="moveTrackInBreak(${breakId}, ${index}, -1)" class="text-gray-500 hover:text-white transition-colors h-4 w-6 flex justify-center items-center" title="Вверх" ${index === 0 ? 'disabled opacity-30 cursor-not-allowed' : ''}>▲</button>
+                        <button onclick="moveTrackInBreak(${breakId}, ${index}, 1)" class="text-gray-500 hover:text-white transition-colors h-4 w-6 flex justify-center items-center" title="Вниз" ${index === breakData.mix.length - 1 ? 'disabled opacity-30 cursor-not-allowed' : ''}>▼</button>
+                    </div>
+                    <button onclick="removeTrackFromBreak(${breakId}, ${index})" class="text-red-500/70 hover:text-red-400 transition-colors w-7 h-8 flex justify-center items-center rounded hover:bg-red-500/10 ml-1" title="Удалить">✕</button>
+                    ` : '<span class="text-xs text-gray-600 px-2">Заблок.</span>'}
+                </div>
+            `;
+            playlistContainer.appendChild(el);
+        });
+
+        const durationStr = formatTime(totalTime);
+        if (totalTime > (breakData.dur * 60) + 60) {
+            playlistDurationInfo.innerHTML = `<span class="text-red-400">${durationStr}</span> / ${breakData.dur}:00`;
+        } else {
+            playlistDurationInfo.innerHTML = `${durationStr} / ${breakData.dur}:00`;
+        }
+    }
+
+    // --- ЛОГИКА АВТОМАТИЗАЦИИ ---
+    function toggleAutomation() {
+        audioPlayer.play().then(() => audioPlayer.pause()).catch(e=>{});
+        bellPlayer.play().then(() => bellPlayer.pause()).catch(e=>{});
+
+        isAutoMode = !isAutoMode;
+        
+        if (isAutoMode) {
+            btnToggleAuto.className = "relative z-10 w-full max-w-md bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-green-900/50 text-lg border-2 border-green-400 pulse-border";
+            btnToggleAuto.innerText = "ОСТАНОВИТЬ АВТО-ПЛЕЕР";
+            
+            audioPlayer.pause();
+            bellPlayer.pause();
+            playingBreakId = null;
+            document.getElementById('playPauseBtn').disabled = true;
+            document.getElementById('btnPrev').disabled = true;
+            document.getElementById('btnNext').disabled = true;
+            
+            const now = new Date();
+            checkSchedule(`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, now.getDay());
+        } else {
+            btnToggleAuto.className = "relative z-10 w-full max-w-md bg-gray-700 hover:bg-green-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg text-lg border-2 border-transparent";
+            btnToggleAuto.innerText = "ВКЛЮЧИТЬ АВТО-ПЛЕЕР";
+            currentStatusText.innerText = "Система ожидает запуска";
+            currentStatusText.className = "text-sm text-gray-400 mb-6 relative z-10 h-5";
+            
+            document.getElementById('playPauseBtn').disabled = false;
+            document.getElementById('btnPrev').disabled = false;
+            document.getElementById('btnNext').disabled = false;
+            
+            audioPlayer.pause();
+            bellPlayer.pause();
+            activeBreakId = null;
+            activeBreakBadge.classList.add('hidden');
+            renderSchedule();
+        }
+        
+        if (viewingBreakId) viewBreakPlaylist(viewingBreakId);
+    }
+
+    function checkSchedule(currentTimeStr, currentDayOfWeek) {
+        // Проверка дня недели
+        if (!activeDays.includes(currentDayOfWeek)) {
+            currentStatusText.innerText = "Сегодня выходной. Музыка отключена.";
+            currentStatusText.className = "text-sm text-yellow-400 mb-6 relative z-10 h-5";
+            if (activeBreakId !== null) stopEverything();
+            return;
+        }
+
+        let foundActive = null;
+        for (let b of schedule) {
+            if (!b.isEnabled) continue; // Игнорируем выключенные перемены
+            if (currentTimeStr >= b.start && currentTimeStr < b.end) {
+                foundActive = b;
+                break;
+            }
+        }
+
+        // 1. Началась новая перемена
+        if (foundActive && activeBreakId !== foundActive.id) {
+            activeBreakId = foundActive.id;
+            currentStatusText.innerText = `ВНИМАНИЕ! ИДЕТ: ${foundActive.label}`;
+            currentStatusText.className = "text-sm text-green-400 mb-6 relative z-10 h-5 font-bold pulse-border px-2 rounded";
+            activeBreakBadge.classList.remove('hidden');
+            renderSchedule();
+
+            const startMix = () => {
+                bellPlayer.onended = null;
+                if (foundActive.mix.length > 0) {
+                    playingBreakId = foundActive.id;
+                    currentTrackIndex = 0;
+                    viewBreakPlaylist(foundActive.id);
+                    loadTrackIntoPlayer(true);
+                } else {
+                    currentTrackNameEl.innerText = "Нет музыки для этой перемены!";
+                }
+            };
+
+            if (bellStart) {
+                currentTrackNameEl.innerText = "Звук начала перемены...";
+                bellPlayer.src = bellStart.url;
+                bellPlayer.onended = startMix;
+                bellPlayer.play().catch(e => { console.error(e); startMix(); });
+            } else {
+                startMix();
+            }
+        } 
+        // 2. Перемена закончилась
+        else if (!foundActive && activeBreakId !== null) {
+            stopEverything(true); // true = играть звонок конца
+        } else if (!foundActive && activeBreakId === null) {
+             currentStatusText.innerText = "Автоматический режим включен. Ждем перемену...";
+             currentStatusText.className = "text-sm text-green-400 mb-6 relative z-10 h-5";
+        }
+    }
+
+    function stopEverything(playEndBell = false) {
+        activeBreakId = null;
+        activeBreakBadge.classList.add('hidden');
+        renderSchedule();
+        
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        currentTrackNameEl.innerText = "Урок (тишина)";
+        progressBar.style.width = "0%";
+        playingBreakId = null;
+
+        if (playEndBell && bellEnd) {
+            currentTrackNameEl.innerText = "Звук конца перемены...";
+            bellPlayer.src = bellEnd.url;
+            bellPlayer.onended = () => {
+                currentTrackNameEl.innerText = "Урок (тишина)";
+                bellPlayer.onended = null;
+            };
+            bellPlayer.play().catch(e => console.error(e));
+        }
+    }
+
+    // --- УПРАВЛЕНИЕ ПЛЕЕРОМ ---
+    function getActiveMix() {
+        if (!playingBreakId) return [];
+        return schedule.find(b => b.id === playingBreakId)?.mix || [];
+    }
+
+    function playSpecificTrack(breakId, index) {
+        if(!isAutoMode) {
+            playingBreakId = breakId; currentTrackIndex = index; loadTrackIntoPlayer(true);
+        } else alert("В автоматическом режиме ручной выбор заблокирован. Остановите авто-плеер.");
+    }
+
+    function loadTrackIntoPlayer(autoPlay = false) {
+        const mix = getActiveMix();
+        if (currentTrackIndex < 0 || currentTrackIndex >= mix.length) return;
+        
+        const track = mix[currentTrackIndex];
+        audioPlayer.src = track.url;
+        currentTrackNameEl.innerText = track.name;
+        totalTimeEl.innerText = formatTime(track.duration);
+        currentTimeEl.innerText = "00:00";
+        progressBar.style.width = "0%";
+        
+        if (viewingBreakId === playingBreakId) viewBreakPlaylist(playingBreakId);
+        if (autoPlay) audioPlayer.play().catch(e => console.error("AutoPlay Error:", e));
+    }
+
+    function togglePlay() {
+        if (isAutoMode) return; 
+        const mix = getActiveMix();
+        if (mix.length === 0 && viewingBreakId) {
+            const viewMix = schedule.find(b => b.id === viewingBreakId)?.mix || [];
+            if(viewMix.length > 0){ playingBreakId = viewingBreakId; currentTrackIndex = 0; loadTrackIntoPlayer(false); } 
+            else return;
+        }
+        if (!audioPlayer.src) return;
+        if (audioPlayer.paused) audioPlayer.play(); else audioPlayer.pause();
+    }
+
+    function nextTrack() {
+        if (isAutoMode) return;
+        const mix = getActiveMix();
+        if (currentTrackIndex < mix.length - 1) { currentTrackIndex++; loadTrackIntoPlayer(true); } 
+        else { audioPlayer.pause(); currentTrackIndex = 0; loadTrackIntoPlayer(false); }
+    }
+
+    function prevTrack() {
+        if (isAutoMode) return;
+        if (audioPlayer.currentTime > 3) audioPlayer.currentTime = 0;
+        else if (currentTrackIndex > 0) { currentTrackIndex--; loadTrackIntoPlayer(true); }
+    }
+
+    // События Аудио
+    audioPlayer.addEventListener('play', () => { playIcon.classList.add('hidden'); pauseIcon.classList.remove('hidden'); });
+    audioPlayer.addEventListener('pause', () => { playIcon.classList.remove('hidden'); pauseIcon.classList.add('hidden'); });
+    audioPlayer.addEventListener('timeupdate', () => {
+        if (isNaN(audioPlayer.duration)) return;
+        progressBar.style.width = `${(audioPlayer.currentTime / audioPlayer.duration) * 100}%`;
+        currentTimeEl.innerText = formatTime(audioPlayer.currentTime);
+    });
+    audioPlayer.addEventListener('ended', () => {
+        const mix = getActiveMix();
+        if (currentTrackIndex < mix.length - 1) { currentTrackIndex++; loadTrackIntoPlayer(true); } 
+        else {
+            if (isAutoMode) { currentTrackIndex = 0; loadTrackIntoPlayer(true); } 
+            else { playIcon.classList.remove('hidden'); pauseIcon.classList.add('hidden'); }
+        }
+    });
+
+    function formatTime(seconds) {
+        if (isNaN(seconds)) return "00:00";
+        const m = Math.floor(seconds / 60), s = Math.floor(seconds % 60);
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // Старт
+    init();
+
+</script>
+</body>
+</html>
